@@ -3,7 +3,7 @@ from datetime import timedelta
 from math import floor
 from os.path import abspath, dirname
 from os.path import join
-from typing import Set
+from typing import Set, Union
 
 import geopandas as gpd
 import mgrs
@@ -234,8 +234,9 @@ class SentinelTileGrid(MGRS):
 
     def tile_footprints(
             self,
-            target_geometry: shapely.geometry.shape or gpd.GeoDataFrame,
+            target_geometry: Union[shapely.geometry.shape, gpd.GeoDataFrame],
             calculate_area: bool = False,
+            calculate_centroid_distance: bool = False,
             eliminate_redundancy: bool = False) -> gpd.GeoDataFrame:
         if isinstance(target_geometry, str):
             target_geometry = shapely.wkt.loads(target_geometry)
@@ -291,7 +292,22 @@ class SentinelTileGrid(MGRS):
                 # tiles["area"] = np.array(area)
                 tiles = tiles[["tile", "area", "geometry"]]
 
+        if calculate_centroid_distance:
+            centroid_latlon = target_geometry.to_crs("EPSG:4326").unary_union.centroid
+            lon = centroid_latlon.x
+            lat = centroid_latlon.y
+            projection = UTM_proj4_from_latlon(lat, lon)
+            target_centroid = target_geometry.to_crs(projection).unary_union.centroid
+            tiles_UTM = tiles.to_crs(projection)
+            tiles_UTM["centroid"] = tiles_UTM.geometry.centroid
+            tiles["distance"] = tiles_UTM["centroid"].apply(lambda centroid: target_centroid.distance(centroid))
+            tiles.sort_values(by="distance", ascending=True, inplace=True)
+            tiles = tiles[[col for col in tiles.columns if col != 'geometry'] + ['geometry']]
+
         return tiles
+    
+    def nearest(self, target_geometry: Union[shapely.geometry.shape, gpd.GeoDataFrame]) -> str:
+        return self.tile_footprints(target_geometry, calculate_centroid_distance=True).iloc[0].tile
 
     def grid(self, tile: str, cell_size: float = None, buffer=0) -> RasterGrid:
         if cell_size is None:
