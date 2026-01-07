@@ -519,12 +519,12 @@ class SentinelTileGrid(MGRS):
             raise ValueError("invalid target geometry")
 
         matches = self.sentinel_polygons[
-            self.sentinel_polygons.intersects(target_geometry.to_crs(self.sentinel_polygons.crs).unary_union)]
+            self.sentinel_polygons.intersects(target_geometry.to_crs(self.sentinel_polygons.crs).union_all())]
         matches.rename(columns={"Name": "tile"}, inplace=True)
         tiles = matches[["tile", "geometry"]]
 
         if calculate_area or eliminate_redundancy:
-            centroid = target_geometry.to_crs("EPSG:4326").unary_union.centroid
+            centroid = target_geometry.to_crs("EPSG:4326").union_all().centroid
             lon = centroid.x
             lat = centroid.y
             projection = UTM_proj4_from_latlon(lat, lon)
@@ -542,7 +542,7 @@ class SentinelTileGrid(MGRS):
                 tiles_UTM = tiles_UTM[["tile", "area", "geometry"]]
                 
                 # Track remaining uncovered area
-                remaining_target = target_UTM.unary_union
+                remaining_target = target_UTM.union_all()
                 remaining_target_area = remaining_target.area
                 indices = []
 
@@ -572,13 +572,13 @@ class SentinelTileGrid(MGRS):
         # Calculate distance from target centroid if requested
         if calculate_centroid_distance:
             # Get target centroid in lat/lon
-            centroid_latlon = target_geometry.to_crs("EPSG:4326").unary_union.centroid
+            centroid_latlon = target_geometry.to_crs("EPSG:4326").union_all().centroid
             lon = centroid_latlon.x
             lat = centroid_latlon.y
             
             # Use UTM projection centered on target for accurate distance calculation
             projection = UTM_proj4_from_latlon(lat, lon)
-            target_centroid = target_geometry.to_crs(projection).unary_union.centroid
+            target_centroid = target_geometry.to_crs(projection).union_all().centroid
             
             # Calculate distance from each tile centroid to target centroid
             tiles_UTM = tiles.to_crs(projection)

@@ -35,3 +35,8 @@ dev = [
 
 [tool.setuptools.package-data]
 sentinel_tiles = ["*.txt", "*.geojson"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Conversion of an array with ndim > 0 to a scalar:DeprecationWarning:pyproj.transformer",
+]
