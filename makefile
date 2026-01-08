@@ -1,3 +1,6 @@
+# Define the default Python version as a constant
+DEFAULT_PYTHON_VERSION = 3.10
+
 .PHONY: dist
 
 PACKAGE_NAME = sentinel-tiles
@@ -40,7 +43,8 @@ reinstall:
 	make install
 
 environment:
-	mamba create -y -n $(ENVIRONMENT_NAME) -c conda-forge python=3.10
+	@PYTHON_VERSION=${PYTHON_VERSION:=$(DEFAULT_PYTHON_VERSION)} \
+	mamba create -y -n $(ENVIRONMENT_NAME) -c conda-forge python=$$PYTHON_VERSION
 
 colima-start:
 	colima start -m 16 -a x86_64 -d 100 
