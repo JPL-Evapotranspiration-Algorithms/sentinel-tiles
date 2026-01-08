@@ -1,5 +1,5 @@
 # Define the default Python version as a constant
-DEFAULT_PYTHON_VERSION = 3.10
+DEFAULT_PYTHON_VERSION = 3.13
 
 .PHONY: dist
 
