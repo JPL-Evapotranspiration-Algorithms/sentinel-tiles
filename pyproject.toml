@@ -14,7 +14,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "rasters>=1.16.1",
+    "rasters>=1.21.0",
     "geopandas",
     "mgrs",
     "numpy",
