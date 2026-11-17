@@ -8,7 +8,6 @@ from typing import Set, Union
 import geopandas as gpd
 import mgrs
 import numpy as np
-import pandas as pd
 import shapely
 import shapely.geometry
 import shapely.wkt
@@ -18,10 +17,6 @@ from rasters import Polygon, BBox
 from rasters import RasterGrid, CRS
 from sentinelsat import read_geojson, geojson_to_wkt
 from shapely.geometry.base import BaseGeometry
-
-# from transform.UTM import UTM_proj4_from_latlon, UTM_proj4_from_zone
-
-pd.options.mode.chained_assignment = None  # default='warn'
 
 DEFAULT_ALBEDO_RESOLUTION = 10
 DEFAULT_SEARCH_DAYS = 10
@@ -36,6 +31,7 @@ DEFAULT_DOWNLOAD_DIRECTORY = "sentinel_download"
 DEFAULT_PRODUCTS_DIRECTORY = "sentinel_products"
 
 logger = logging.getLogger(__name__)
+
 
 def UTM_proj4_from_latlon(lat: float, lon: float) -> str:
     """
@@ -139,46 +135,15 @@ def parse_sentinel_granule_id(granule_id: str) -> dict:
         >>> parse_sentinel_granule_id('S2A_MSIL1C_20170105T013442_N0204_R031_T53NMJ_20170105T013443.SAFE')
         {'mission_id': 'S2A', 'product': 'MSIL1C', 'date': datetime(...), ...}
     """
-    # Compact Naming Convention
-    #
-    # The compact naming convention is arranged as follows:
-    #
-    # MMM_MSIXXX_YYYYMMDDHHMMSS_Nxxyy_ROOO_Txxxxx_<Product Discriminator>.SAFE
-    #
-    # The products contain two dates.
-    #
-    # The first date (YYYYMMDDHHMMSS) is the datatake sensing time.
-    # The second date is the "<Product Discriminator>" field, which is 15 characters in length, and is used to distinguish between different end user products from the same datatake. Depending on the instance, the time in this field can be earlier or slightly later than the datatake sensing time.
-    #
-    # The other components of the filename are:
-    #
-    # MMM: is the mission ID(S2A/S2B)
-    # MSIXXX: MSIL1C denotes the Level-1C product level/ MSIL2A denotes the Level-2A product level
-    # YYYYMMDDHHMMSS: the datatake sensing start time
-    # Nxxyy: the PDGS Processing Baseline number (e.g. N0204)
-    # ROOO: Relative Orbit number (R001 - R143)
-    # Txxxxx: Tile Number field
-    # SAFE: Product Format (Standard Archive Format for Europe)
-    #
-    # Thus, the following filename
-    #
-    # S2A_MSIL1C_20170105T013442_N0204_R031_T53NMJ_20170105T013443.SAFE
-    #
-    # Identifies a Level-1C product acquired by Sentinel-2A on the 5th of January, 2017 at 1:34:42 AM. It was acquired over Tile 53NMJ(2) during Relative Orbit 031, and processed with PDGS Processing Baseline 02.04.
-    #
-    # In addition to the above changes, a a TCI (True Colour Image) in JPEG2000 format is included within the Tile folder of Level-1C products in this format. For more information on the TCI, see the Definitions page here.
-    # https://sentinel.esa.int/web/sentinel/user-guides/sentinel-2-msi/naming-convention
-    
-    # Split the granule ID by underscores to extract components
     parts = granule_id.split("_")
 
     return {
         "mission_id": parts[0],        # S2A or S2B
-        "product": parts[1],            # MSIL1C or MSIL2A
+        "product": parts[1],           # MSIL1C or MSIL2A
         "date": parser.parse(parts[2]), # Datatake sensing time
-        "baseline": parts[3],           # Processing baseline (e.g., N0204)
-        "orbit": parts[4],              # Relative orbit (R001-R143)
-        "tile": parts[5][1:]            # Tile number without 'T' prefix
+        "baseline": parts[3],          # Processing baseline (e.g., N0204)
+        "orbit": parts[4],             # Relative orbit (R001-R143)
+        "tile": parts[5][1:]           # Tile number without 'T' prefix
     }
 
 
@@ -226,6 +191,7 @@ def UTC_to_solar(time_UTC, lon: float):
     # Calculate time offset: longitude in radians / π * 12 hours
     # This converts longitude to hours (360° = 24 hours, so 15° = 1 hour)
     return time_UTC + timedelta(hours=(np.radians(lon) / np.pi * 12))
+
 
 class MGRS(mgrs.MGRS):
     """
@@ -519,9 +485,9 @@ class SentinelTileGrid(MGRS):
             raise ValueError("invalid target geometry")
 
         matches = self.sentinel_polygons[
-            self.sentinel_polygons.intersects(target_geometry.to_crs(self.sentinel_polygons.crs).union_all())]
-        matches.rename(columns={"Name": "tile"}, inplace=True)
-        tiles = matches[["tile", "geometry"]]
+            self.sentinel_polygons.intersects(target_geometry.to_crs(self.sentinel_polygons.crs).union_all())
+        ]
+        tiles = matches.rename(columns={"Name": "tile"})[["tile", "geometry"]].copy()
 
         if calculate_area or eliminate_redundancy:
             centroid = target_geometry.to_crs("EPSG:4326").union_all().centroid
@@ -531,15 +497,14 @@ class SentinelTileGrid(MGRS):
             tiles_UTM = tiles.to_crs(projection)
             target_UTM = target_geometry.to_crs(projection)
             tiles_UTM["area"] = gpd.overlay(tiles_UTM, target_UTM).geometry.area
-            # overlap = gpd.overlay(tiles_UTM, target_UTM)
-            # area = overlap.geometry.area
 
             # Eliminate redundant tiles that don't add new coverage
             if eliminate_redundancy:
                 # Sort by area (largest first) to prioritize tiles with most coverage
-                tiles_UTM.sort_values(by="area", ascending=False, inplace=True)
-                tiles_UTM.reset_index(inplace=True)
-                tiles_UTM = tiles_UTM[["tile", "area", "geometry"]]
+                tiles_UTM = (
+                    tiles_UTM.sort_values(by="area", ascending=False)
+                    .reset_index(drop=True)[["tile", "area", "geometry"]]
+                )
                 
                 # Track remaining uncovered area
                 remaining_target = target_UTM.union_all()
@@ -563,10 +528,9 @@ class SentinelTileGrid(MGRS):
 
                 tiles_UTM = tiles_UTM.iloc[indices, :]
                 tiles = tiles_UTM.to_crs(tiles.crs)
-                tiles.sort_values(by="tile", ascending=True, inplace=True)
+                tiles = tiles.sort_values(by="tile", ascending=True)
                 tiles = tiles[["tile", "area", "geometry"]]
             else:
-                # tiles["area"] = np.array(area)
                 tiles = tiles[["tile", "area", "geometry"]]
 
         # Calculate distance from target centroid if requested
@@ -586,7 +550,7 @@ class SentinelTileGrid(MGRS):
             tiles["distance"] = tiles_UTM["centroid"].apply(lambda centroid: target_centroid.distance(centroid))
             
             # Sort by distance (nearest first)
-            tiles.sort_values(by="distance", ascending=True, inplace=True)
+            tiles = tiles.sort_values(by="distance", ascending=True)
             
             # Reorder columns to put geometry last
             tiles = tiles[[col for col in tiles.columns if col != 'geometry'] + ['geometry']]
@@ -683,6 +647,7 @@ class SentinelTileGrid(MGRS):
         tiles = tiles[["tile", "area", "grid", "geometry"]]
 
         return tiles
+
 
 # Pre-initialized instance for convenient access to Sentinel-2 tile grid functionality
 sentinel_tiles = SentinelTileGrid()
