@@ -1,7 +1,7 @@
 # Define the default Python version as a constant
 DEFAULT_PYTHON_VERSION = 3.13
 
-.PHONY: dist
+.PHONY: dist repomix
 
 PACKAGE_NAME = sentinel-tiles
 ENVIRONMENT_NAME = $(PACKAGE_NAME)
@@ -63,3 +63,6 @@ docker-interactive:
 
 docker-remove:
 	docker rmi -f $(DOCKER_IMAGE_NAME)
+
+repomix:
+	npx repomix --ignore "**/*.geojson,LICENSE,.gitignore" --copy
