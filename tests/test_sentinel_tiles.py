@@ -4,10 +4,13 @@ Unit tests for the sentinel_tiles module.
 Tests cover all utility functions, the MGRS class, and the SentinelTileGrid class.
 """
 
+import importlib
+import warnings
 import pytest
 from datetime import datetime, timedelta
 from shapely.geometry import Point, box, Polygon as ShapelyPolygon
 import geopandas as gpd
+import numpy as np
 from affine import Affine
 
 from sentinel_tiles import (
@@ -367,6 +370,26 @@ class TestSentinelTileGrid:
         assert isinstance(footprints, gpd.GeoDataFrame)
         assert len(footprints) > 0
     
+    def test_no_pandas_warnings(self):
+        """Test that importing sentinel_tiles and calling tile_footprints emit no pandas warnings."""
+        import sentinel_tiles as sentinel_tiles_module
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            importlib.reload(sentinel_tiles_module)
+            sentinel_tiles_module.sentinel_tiles.tile_footprints(
+                box(-119, 34, -118, 35),
+                calculate_area=True,
+                calculate_centroid_distance=True,
+                eliminate_redundancy=True,
+            )
+
+        pandas_warnings = [
+            w for w in caught
+            if "chained_assignment" in str(w.message) or "ChainedAssignment" in str(w.message)
+        ]
+        assert len(pandas_warnings) == 0
+    
     def test_nearest(self):
         """Test nearest tile finding."""
         grid = SentinelTileGrid()
@@ -503,10 +526,6 @@ class TestIntegration:
         assert bbox is not None
         assert footprint is not None
         assert isinstance(has_land, (bool, np.bool_))
-
-
-# Import numpy for boolean type checking
-import numpy as np
 
 
 if __name__ == '__main__':
